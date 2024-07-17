@@ -20,24 +20,31 @@ export default {
       time_spent: ref(''),
       soundON: ref(1),
       flashRed: ref(false),
+      flashGreen: ref(false),
+      btn_disable: ref(false),
+      leaderboard: [],
     }
   },
 
 
   methods: {
     restart(){
+      clearInterval(this.timer);
+      clearInterval(this.game_timer); 
       this.mask = 1;
-
+      this.load_leaderboard();
     },
     start() {
       clearInterval(this.timer); // Clear any existing timer
       clearInterval(this.game_timer); // Clear any existing game timer
-      this.time = 60;//60 normaly , 10 for end screen debug
+      this.time = 60;//60 normaly, 10 for end screen debug
       this.game_time = 0;
       this.question_num = 0;
       this.score = 0;
       this.mask = 0;
+      this.btn_disable = false;
       this.next_question();
+      this.load_leaderboard();
 
       this.$nextTick(() => {
         this.$refs.ans.focus();
@@ -54,23 +61,35 @@ export default {
       if(this.submit_ans == this.answer){
         this.score++;
         this.time += 2;
+        this.flashGreen = true;
+
         if(this.soundON == 1){
         let audio = new Audio("correct.mp3");
-        audio.play();          
+        audio.play();       
         }
+
+        setTimeout(() => {
+          this.flashGreen = false;
+        }, 300);  
+        this.next_question();
       } else{
         this.flashRed = true;
-      setTimeout(() => {
-        this.flashRed = false;
-      }, 1000);
+        this.btn_disable = true;
+        this.equation = `Correct: ${this.answer}`;
+
+
         if(this.soundON == 1){
         let audio = new Audio("wrong.mp3");
-        this.time -= 2;
-        audio.play();          
+        audio.play(); 
         }
-      }
+        this.time -= 1;
 
-      this.next_question();
+        setTimeout(() => {
+          this.flashRed = false;
+          this.btn_disable = false;
+          this.next_question();
+        }, 1000);        
+      }
     },
     countDown(){
       if (this.time > 1) {
@@ -136,8 +155,20 @@ export default {
 
       this.equation = `${x} ${operation_symbol} ${y}`;
     },
-    send_score(e){
+    async send_score(e){
       e.preventDefault();
+      this.btn_disable = true;
+      const target = e.target;
+      const name = target.querySelector('#name').value;
+      if(name.length <= 15){
+        await icp_bootcamp_project_backend.add_record(name,this.score.toString());
+        this.load_leaderboard();        
+      }else{
+        this.btn_disable = false;
+      }
+    },
+    async load_leaderboard(){
+      this.leaderboard = await icp_bootcamp_project_backend.read_leaderboard();
     },
     toggleAudio(){
       if(this.soundON == 1){
@@ -154,6 +185,12 @@ export default {
   mounted(){
     const audio_button = document.getElementById("audio_button");
     audio_button.innerHTML = '<img src="/audioON_btn.jpg" width="50" height="50" />';
+    this.load_leaderboard();
+  },
+  computed: {
+    limitedLeaderboard() {
+      return this.leaderboard.slice(0, 8);
+    }
   }
 }
 </script>
@@ -171,8 +208,8 @@ export default {
     <div class="bg-slate-600 h-16"></div> <!-- Top span panel -->
 
 
-    <div class="grid grid-cols-3 h-4/6"> <!-- Main screen -->
-      <div class="bg-slate-600 flex"> <!-- Left side -->
+    <div class="grid xl:grid-cols-3 lg:grid-cols-1"> <!-- Main screen -->
+      <div class="bg-slate-600 flex justify-center"> <!-- Left side -->
         <div v-if="mask == 1" ><!-- Left side start -->
           <br>
           <br>
@@ -187,96 +224,102 @@ export default {
           </div>
         </div>
         <div v-if="mask == 0" class="flex items-center justify-center grow"><!-- Left side game -->
-          <div class="text-center text-4xl">
+          <div class="text-center 2xl:text-4xl xl:text-3xl">
             <p>Highscore: {{ highscore }}</p>
-            <p class="py-20">Score: {{score}}</p>
-            <p>Time left: {{ time }} </p>         
+            <p class="pt-10">Score: {{score}}</p>
+            <p class="py-10">Time left: {{ time }} </p>         
           </div>
         </div>
         <div v-if="mask == 2" class="flex items-center justify-center grow"><!-- Left side end screen -->
-          <div class="text-center text-4xl">
+          <div class="text-center 2xl:text-4xl xl:text-3xl text-3xl">
             <p>Highscore: {{ highscore }}</p>
             <p class="py-10">Score: {{score}}</p>
             <p>Questions asked: {{ question_num }} </p>  
             <p class="py-10">Correct answers: {{ score }}</p>  
             <p>Wrong answers: {{ question_num - score }}</p>
-            <p class="pt-10">Time {{ time_spent }}</p>
+            <p class="py-10">Time {{ time_spent }}</p>
           </div>
         </div>
       </div>
-      <div :class="{'flash-red': flashred }">
-        <div class="bg-slate-700 h-full drop-shadow-2xl"><!-- Middle -->
-          <div v-if="mask == 1" class="h-full flex justify-center items-center" > <!-- Start menu -->
-            <div class="flex justify-center">
-              <button @click="start" class="bg-orange-600 hover:bg-orange-700 rounded text-white p-20 text-5xl">Start</button>
-            </div>
+
+      <div :class="{'bg-red-500': flashRed, 'bg-green-500': flashGreen, 'bg-slate-700': !flashRed && !flashGreen}" class="h-full drop-shadow-2xl py-10"><!-- Middle -->
+        <div v-if="mask == 1" class="h-full flex justify-center items-center" > <!-- Start menu -->
+          <div class="flex justify-center">
+            <button @click="start" class="bg-orange-600 hover:bg-orange-700 rounded text-white p-20 text-5xl xl:text 4xl">Start</button>
           </div>
-          <div v-if="mask == 0" class="h-full">   <!-- Game -->
-            <br />
-            <div class="text-center text-4xl">
-              Question {{ question_num }}
-            </div>
-            <br />
-            <br />
-            <br />
-            <div class="text-center text-7xl">
-                  {{ equation }}
-            </div>
-            <br />
-            <br />
-            <form action="#" @submit="handleSubmit" class="flex flex-col items-stretch place-content-evenly">
-              <div class="text-center text-lg">
-                  Enter your answer
-              </div>
-              <input id="ans" ref="ans" autocomplete="off" type="text" class="border-2 border-orange-600 p-4 mx-20 text-center text-black"/>
-              <button type="submit" class="bg-orange-600 hover:bg-orange-700 rounded text-white p-4 mx-20 mt-4">Answer</button>
-              <button @click="restart" class="bg-orange-600 hover:bg-orange-700 rounded text-white p-4 mx-20 ">Restart</button>
-            </form>
-            
+        </div>
+        <div v-if="mask == 0" class="h-full">   <!-- Game -->
+          <br />
+          <div class="text-center 2xl:text-4xl text-3xl">
+            Question {{ question_num }}
           </div>
-          <div v-if="mask == 2" class="h-full"> <!-- End screen -->
-            <br />
-            <p class="text-center text-4xl">Time's up!</p>
-            <br />
-            <br />
-            <p class="text-center text-4xl">Share your score on the leaderboard.</p>
-            <br />
-            <form action="#" @submit="send_score" class="flex flex-col items-stretch">
-              <div class="text-center text-lg">
-                  Enter your name
-              </div>
-              <input id="name" ref="name" autocomplete="off" type="text" class="border-2 border-orange-600 p-4 mx-20 text-center text-black"/>
-              <button type="submit" class="bg-orange-600 hover:bg-orange-700 rounded text-white p-4 mx-20">Send</button>
-              <button @click="start" class="bg-orange-600 hover:bg-orange-700 rounded text-white p-4 mx-20">Restart</button>
-            </form>
+          <br />
+          <br />
+          <div class="text-center text-5xl 2xl:text-7xl">
+                {{ equation }}
           </div>
+          <br />
+          <form action="#" @submit="handleSubmit" class="flex flex-col items-stretch place-content-evenly">
+            <div class="text-center text-lg">
+                Enter your answer
+            </div>
+            <input id="ans" ref="ans" autocomplete="off" type="text" class="border-2 border-orange-600 p-4 mx-20 text-center text-black"/>
+            <button :disabled="btn_disable" type="submit" class="bg-orange-600 hover:bg-orange-700 rounded text-white p-3 mx-20 xl:mx-15">Answer</button>
+            <button :disabled="btn_disable" @click="restart" class="bg-orange-600 hover:bg-orange-700 rounded text-white p-4 mx-20 xl:mx-15 ">Restart</button>
+          </form>
+        </div>
+
+        <div v-if="mask == 2" class="h-full"> <!-- End screen -->
+          <br />
+          <p class="text-center text-4xl">Time's up!</p>
+          <br />
+          <br />
+          <p class="text-center text-4xl">Share your score on the leaderboard.</p>
+          <br />
+          <form action="#" @submit="send_score" class="flex flex-col items-stretch place-content-evenly">
+            <div class="text-center text-lg">
+                Enter your name (max 15 characters)
+            </div>
+            <input id="name" ref="name" autocomplete="off" type="text" class="border-2 border-orange-600 p-4 mx-20 text-center text-black"/>
+            <button :disabled="btn_disable" type="submit" class="bg-orange-600 hover:bg-orange-700 rounded text-white p-4 mx-20">Send</button>
+            <button @click="start" class="bg-orange-600 hover:bg-orange-700 rounded text-white p-4 mx-20">Restart</button>
+          </form>
         </div>
       </div>
       
-      <div class="bg-violet-600 rounded p-4 mx-20">
-        <div class="rounded-lg text-5xl flex justify-center font-semibold text-red-500">   <!-- Right side -->
-              LEADERBOARD
-        </div>
+      <div class="bg-slate-600 py-10"><!-- Right side -->
+        <div class="bg-slate-700 rounded p-4 mx-20 h-full">
+          <div class="rounded-lg grid mx-6 gap-4">   
+              <p class="2xl:text-3xl xl:text-2xl text-center text-4xl">LEADERBOARD</p>
+              <div class="flex justify-between text-gray-400 2xl:text-2xl text-xl">
+                <p>Player name</p>
+                <p>Score</p>
+              </div>
+              <div v-for="record in limitedLeaderboard" :key="record[0]" class="flex justify-between 2xl:text-2xl xl:text-xl text-2xl">
+                <p>{{ record[0] }}</p>
+                <p>{{ record[1] }}</p>
+              </div>
+          </div>
+        </div>        
       </div>
     </div>
 
     <div class="bg-slate-600 h-16"></div> <!-- Bottom span panel -->
 
-    <div class="bg-slate-800 h-20 flex items-center">   <!-- Bottom -->
-      <div class="text-sm text-gray-400 pl-10 grid grid-cols-2 gap-10">
-        <div>
-          <p class="text-base">Project repository</p>
-          <a href="https://github.com/KamilBorkowskiYB/ICP_WEB3.0_container">https://github.com/KamilBorkowskiYB/ICP_WEB3.0_container</a>
-          <br>
-        </div>
-        <div>
-          <p class="text-base">Authors' repositories</p>
-          <a href="https://github.com/KamilBorkowskiYB">https://github.com/KamilBorkowskiYB</a>
-          <br>
-          <a href="https://github.com/Gemmon">https://github.com/Gemmon</a>
-        </div>
-      </div>
+<div class="bg-slate-800 h-20 flex items-center">   <!-- Bottom -->
+  <div class="text-sm text-gray-400 pl-10 grid grid-cols-2 gap-10">
+    <div>
+      <p class="text-base">Project repository</p>
+      <a href="https://github.com/KamilBorkowskiYB/ICP_WEB3.0_container">https://github.com/KamilBorkowskiYB/ICP_WEB3.0_container</a>
+      <br>
     </div>
-  </main>
+    <div>
+      <p class="text-base">Authors' repositories</p>
+      <a href="https://github.com/KamilBorkowskiYB">https://github.com/KamilBorkowskiYB</a>
+      <br>
+      <a href="https://github.com/Gemmon">https://github.com/Gemmon</a>
+    </div>
+  </div>
+</div>
+</main>
 </template>
-

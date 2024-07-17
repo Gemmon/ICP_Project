@@ -1,3 +1,6 @@
 service : {
-    "greet": (text) -> (text) query;
+    add_record: (text, text) -> ();
+    read_leaderboard: () -> (vec vec text) query;
+    clear_leaderboard: () -> ();
+    sort_leaderboard: () -> ();
 }
